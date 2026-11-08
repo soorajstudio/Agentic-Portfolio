@@ -1542,24 +1542,11 @@
 .intro .mono{width:60px;height:60px;border-radius:16px;background:#D7DADE;color:#fff;font:700 30px/60px Inter,system-ui,sans-serif;text-align:center}
 .hud{display:none!important}
 .hud.on{display:none!important}
-.hud .dots{display:flex;padding-left:5px}
-.hud .dots i{display:block;width:18px;height:18px;margin-left:-5px;border-radius:50%;border:2px solid #1e1e1e;font:700 9px/14px Inter,system-ui,sans-serif;font-style:normal;text-align:center;color:#fff;transition:background .3s}
-.hud .txt,.hud .status{display:flex;align-items:center;gap:7px;color:#cfcfcf;font-variant-numeric:tabular-nums}
-.hud .txt b{color:#fff;font-weight:600}
-.hud .sep{width:1px;height:12px;background:#444}
-.hud .bar{width:64px;height:3px;border-radius:2px;background:#3a3a3a;overflow:hidden}
-.hud .bar i{display:block;height:100%;width:0;background:#0D99FF;transition:width .35s ease}
-.hud button{all:unset;cursor:pointer;padding:7px 10px;border-radius:8px;background:#2c2c2c;color:#fff;font:500 12px/1 Inter,system-ui,-apple-system,sans-serif;transition:background .15s}
-.hud button:hover{background:#3a3a3a}
-.hud button.pri{background:#0D99FF}
-.hud button.pri:hover{background:#2aa6ff}
-.hud button.on{background:rgba(13,153,255,.22);color:#8fd0ff}
-.hud button[hidden]{display:none}
-.hud .x{padding:7px 9px;color:#aaa}
-.hud button.snd{display:flex;align-items:center;gap:6px;padding:6px 8px}
-.hud button.snd.off{color:#8a8a8a}
-.hud button.snd.tap{background:#0D99FF;animation:hudpulse 1.6s ease-in-out infinite}
-@keyframes hudpulse{50%{box-shadow:0 0 0 4px rgba(13,153,255,.28)}}
+.sound-float-btn{all:unset;position:fixed;bottom:24px;right:24px;z-index:999999;display:flex;align-items:center;gap:8px;padding:9px 14px;background:rgba(18,18,18,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.16);border-radius:9999px;color:#fff;font:600 12px/1 'JetBrains Mono',Inter,monospace;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.6);transition:all .2s ease;user-select:none;pointer-events:auto}
+.sound-float-btn:hover{background:rgba(32,32,32,.98);border-color:rgba(255,255,255,.3);transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.8)}
+.sound-float-btn.tap{background:var(--accent-red,#ef4444);border-color:#ff6b6b;color:#000;animation:soundPulse 1.8s ease-in-out infinite}
+.sound-float-btn.off{color:#888;border-color:rgba(255,255,255,.08)}
+@keyframes soundPulse{0%,100%{transform:scale(1);box-shadow:0 0 0 rgba(239,68,68,0)}50%{transform:scale(1.04);box-shadow:0 0 20px rgba(239,68,68,.7)}}
 `;
 
   // -------------------------------------------------------------------- env
@@ -1655,6 +1642,7 @@
 <div class="badges"></div>
 <div class="cursors"></div>
 <div class="rulers"></div>
+<button data-a="sound-float" class="sound-float-btn" title="Toggle audio (M)"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6v4h2.5l3.5 3V3L5 6z" fill="currentColor"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.6a6 6 0 0 1 0 8.8"/></svg><span>AUDIO</span></button>
 <div class="hud">
   <div class="dots"></div>
   <div class="txt"><span class="status">Scanning page…</span></div>
@@ -3516,8 +3504,23 @@
       this.engine = new Engine(this.view);
       this.sfx = new Sound();
       this.sfx.init();
+      this.sfx.resume();
+      // Ensure autoplay by automatically unlocking audio on first touch, click, scroll or keypress
+      const autoUnlock = () => {
+        this.unlockSound();
+        window.removeEventListener("pointerdown", autoUnlock, true);
+        window.removeEventListener("scroll", autoUnlock, true);
+        window.removeEventListener("keydown", autoUnlock, true);
+      };
+      window.addEventListener("pointerdown", autoUnlock, { once: true, passive: true });
+      window.addEventListener("scroll", autoUnlock, { once: true, passive: true });
+      window.addEventListener("keydown", autoUnlock, { once: true, passive: true });
+
       this.engine.sfx = this.sfx;
-      this.engine.onStart = () => this.view.intro.classList.add("gone");
+      this.engine.onStart = () => {
+        this.sfx.resume();
+        this.view.intro.classList.add("gone");
+      };
       this.engine.onComplete = () => this.onComplete();
       this.bind();
       this.last = performance.now();
@@ -3592,6 +3595,12 @@
       const scrollTarget = this.env.isRoot ? window : this.env.scroller;
       on(scrollTarget, "scroll", () => {
         if (!this.view.frozen) this.view.syncWorld();
+        // Go live automatically when the website reaches the bottom
+        const g = this.env.geom();
+        const maxScroll = this.env.scrollHeight() - g.vh;
+        if (maxScroll > 100 && g.sy >= maxScroll - 60 && !this.dead && !this.complete) {
+          stop(true);
+        }
       }, { passive: true });
       on(window, "resize", () => this.view.measure());
       on(window, "wheel", () => {
@@ -3622,38 +3631,28 @@
           this.env.scroller.scrollBy({ top: e.deltaY, left: e.deltaX, behavior: "instant" });
         }, { passive: false });
       }
-      on(this.view.hud, "click", (e) => {
+      on(this.view.root, "click", (e) => {
         const b = e.target.closest("button");
         if (!b) return;
         const a = b.dataset.a;
-        if (a === "close") stop(false);
-        else if (a === "live") stop(true);
-        else if (a === "replay") restart();
-        else if (a === "tour") {
-          this.tour = !this.tour;
-          b.classList.toggle("on", this.tour);
-          b.textContent = this.tour ? "Touring" : "Tour";
-          if (this.tour) this.engine.start();
-        } else if (a === "sound") {
+        if (a === "sound-float" || a === "sound") {
           if (this.sfx.on && this.sfx.blocked) this.sfx.resume();
           else this.sfx.setOn(!this.sfx.on);
           setTimeout(() => this.renderSoundBtn(), 60);
-        } else if (a === "speed") {
-          this.speedIx = (this.speedIx + 1) % this.speeds.length;
-          this.engine.speed = this.speeds[this.speedIx];
-          b.textContent = this.speeds[this.speedIx] + "×";
-        }
+        } else if (a === "close") stop(false);
+        else if (a === "live") stop(true);
+        else if (a === "replay") restart();
       });
     }
 
     unlockSound() {
-      if (this.dead || !this.sfx || !this.sfx.blocked) return;
+      if (this.dead || !this.sfx) return;
       this.sfx.resume();
       setTimeout(() => this.renderSoundBtn(), 80);
     }
 
     renderSoundBtn() {
-      const b = this.view.root.querySelector('[data-a="sound"]');
+      const b = this.view.root.querySelector('[data-a="sound-float"]');
       if (!b || !this.sfx) return;
       const tap = this.sfx.on && this.sfx.blocked;
       const key = this.sfx.on ? (tap ? "tap" : "on") : "off";
@@ -3663,8 +3662,8 @@
       b.classList.toggle("tap", tap);
       const waves = '<path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.6a6 6 0 0 1 0 8.8"/>';
       const mute = '<path d="M11 6l4 4M15 6l-4 4"/>';
-      b.innerHTML = `${SPK_ICON}${key === "off" ? mute : waves}</svg>${tap ? "<span>Tap for sound</span>" : ""}`;
-      b.title = key === "off" ? "Sound off (M)" : "Sound on (M)";
+      b.innerHTML = `${SPK_ICON}${key === "off" ? mute : waves}</svg><span>${key === "off" ? "Muted" : tap ? "Tap for audio" : "Sound on"}</span>`;
+      b.title = key === "off" ? "Unmute audio (M)" : "Mute audio (M)";
     }
 
     frame(now) {

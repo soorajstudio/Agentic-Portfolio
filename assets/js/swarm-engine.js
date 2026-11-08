@@ -2437,7 +2437,6 @@
     }
 
     flockTarget() {
-      if (this.mouse) return this.fromViewport(this.mouse.x, this.mouse.y);
       const t = this.time;
       const vp = this.vp;
       return this.fromViewport(vp.ox + vp.vw * (0.5 + 0.28 * Math.sin(t * 0.37)), vp.oy + vp.vh * (0.5 + 0.25 * Math.sin(t * 0.53 + 1)));
@@ -2464,9 +2463,9 @@
       this.follow(dt, this.cursors);
     }
 
-    // Boids-ish orbit around a target, ported from the original.
+    // Boids-ish orbit around target without chasing user mouse
     follow(dt, list, target, scale = 1) {
-      const m = this.mouse ? this.fromViewport(this.mouse.x, this.mouse.y) : null;
+      const m = null; // Ignore user mouse pointer
       const o = target || this.flockTarget();
       const time = this.time;
       if (m && this.lastT && dt > 0) {
@@ -3599,7 +3598,8 @@
         if (this.engine.ready) this.engine.start();
       }, { passive: true });
       on(window, "pointermove", (e) => {
-        this.engine.mouse = { x: e.clientX, y: e.clientY };
+        // Disabled: do not track or swarm user mouse pointer
+        this.engine.mouse = null;
       }, { passive: true });
       on(document.documentElement, "pointerleave", () => {
         this.engine.mouse = null;

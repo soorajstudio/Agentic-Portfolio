@@ -50,10 +50,10 @@
   const BLUE = "#0D99FF";
   const RED = "#F24822";
   const RULER = 20;
-  const MIN_AGENTS = 2;
-  const MAX_AGENTS = 24;
-  const FLOCK_AGENTS = 16;
-  const INTRO_AGENTS = 8;
+  const MIN_AGENTS = 8;
+  const MAX_AGENTS = 36;
+  const FLOCK_AGENTS = 24;
+  const INTRO_AGENTS = 12;
   const MAX_ITEMS = 4000;
   const MAX_WORLD_H = 40000;
   const SVGNS = "http://www.w3.org/2000/svg";
@@ -2359,8 +2359,7 @@
         );
 
       this.spawnCooldown -= dt;
-      // Elastic worker pool: exactly matches active workload, scaling up when tasks pile up and down when finished
-      const want = clamp(Math.min(avail.length, MAX_AGENTS), avail.length > 0 ? 3 : 0, MAX_AGENTS);
+      const want = clamp(MIN_AGENTS + Math.floor(avail.length / 3), MIN_AGENTS, MAX_AGENTS);
       const active = this.cursors.filter((c) => !c.leaving).length;
       const busy = this.cursors.filter((c) => c.task).length;
       if (active < want && avail.length > active - busy && this.spawnCooldown <= 0) {
@@ -2394,8 +2393,7 @@
         if (c.angle !== 0) c.angle = Math.abs(c.angle) < 0.5 ? 0 : c.angle * (1 - Math.min(1, dt * 10));
         if (!c.task) {
           c.idleFor += dt;
-          // Option 1 (Elastic work & clean exit): if idle for > 0.4s and there is no pending work, exit cleanly off-screen
-          if (!c.leaving && (c.idleFor > 0.4 || avail.length === 0) && !c.home) {
+          if (!c.leaving && c.idleFor > 2.0 && this.cursors.filter((m) => !m.leaving).length > MIN_AGENTS && !c.home) {
             c.leaving = true;
             c.gen = this.leave(c);
           }
@@ -3595,11 +3593,13 @@
       const scrollTarget = this.env.isRoot ? window : this.env.scroller;
       on(scrollTarget, "scroll", () => {
         if (!this.view.frozen) this.view.syncWorld();
-        // Go live automatically when the website reaches the bottom
-        const g = this.env.geom();
-        const maxScroll = this.env.scrollHeight() - g.vh;
-        if (maxScroll > 100 && g.sy >= maxScroll - 60 && !this.dead && !this.complete) {
-          stop(true);
+        // Go live automatically when the website reaches the bottom while building
+        if (this.engine.started && !this.view.frozen && !this.dead && !this.complete) {
+          const g = this.env.geom();
+          const maxScroll = this.env.scrollHeight() - g.vh;
+          if (maxScroll > 100 && g.sy >= maxScroll - 60) {
+            stop(true);
+          }
         }
       }, { passive: true });
       on(window, "resize", () => this.view.measure());

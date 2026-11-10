@@ -1525,7 +1525,8 @@
 .ov{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none}
 .badges,.cursors{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .badge{position:absolute;transform:translate(-50%);padding:1px 4px;border-radius:2px;color:#fff;font:600 11px/16px Inter,system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
-.cursor{position:absolute;left:0;top:0;will-change:transform}
+.cursor{position:absolute;left:0;top:0;will-change:transform;transition:opacity .25s ease}
+.cursor.idle-hidden{opacity:0}
 .cursor svg{position:absolute;overflow:visible;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.28))}
 .rulers{position:absolute;inset:0;pointer-events:none}
 .ruler{position:absolute;background:#2c2c2c;pointer-events:none}
@@ -1947,6 +1948,9 @@
         }
         const s = 1 - c.press * 0.12;
         svg.style.transform = `translate(${-el._hx}px,${-el._hy}px) rotate(${f1(c.angle)}deg) scale(${s})`;
+        // Cursor hiding system: smoothly hide cursors when they have no work assigned
+        const isIdle = !c.task && !c.follow;
+        el.classList.toggle("idle-hidden", isIdle);
       }
       for (const [id, el] of this.cursorEls)
         if (!seen.has(id)) {
